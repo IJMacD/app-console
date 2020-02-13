@@ -1,0 +1,40 @@
+.ConsoleDisplay {
+    background: #111;
+    color: #f0f0f0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    overflow-x: hidden;
+}
+
+.ConsoleDisplay ul {
+    padding: 0;
+    list-style: none;
+    margin: 0;
+    white-space: pre;
+}
+
+.ConsoleDisplay-hist-input::before {
+    content: "> ";
+}
+
+.ConsoleDisplay-hist-error {
+    color: #C33;
+}
+
+.ConsoleDisplay form {
+    display: flex;
+    align-items: center;
+}
+
+.ConsoleDisplay input {
+    background: transparent;
+    color: white;
+    border: 0;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    flex: 1;
+}
+
+.ConsoleDisplay input:focus {
+    outline: none;
+}
