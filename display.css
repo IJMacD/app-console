@@ -4,13 +4,13 @@
     font-family: 'Courier New', Courier, monospace;
     font-size: 14px;
     overflow-x: hidden;
+    white-space: pre;
 }
 
 .ConsoleDisplay ul {
     padding: 0;
     list-style: none;
     margin: 0;
-    white-space: pre;
 }
 
 .ConsoleDisplay-hist-input::before {
