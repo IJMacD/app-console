@@ -5,6 +5,7 @@ const BUILTINS = {
     type: v => typeof v,
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
     echo: (...a) => a.join(" "),
+    alert: (...a) => alert(a.join(" ")),
 };
 
 export default class Interpreter {
