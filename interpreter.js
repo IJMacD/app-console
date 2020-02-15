@@ -20,15 +20,12 @@ export default class Interpreter {
     async execute (input, outputCallback) {
         const { executables = {}, variables = {} } = this.context;
 
-        const run = async (cmd) => {
-            let { command, args } = cmd;
+        const run = async (statement) => {
+            if (typeof statement === "number") return statement;
 
-            if (typeof command === "object" && command.variable) {
-                if (args.length) throw Error("Unexpected input: " + (typeof args[0] === "object" ? `$${args[0].variable}` : args[0]));
-                return variables[command.variable];
-            }
-            
-            if (typeof command === "number") return command;
+            if (typeof statement.variable !== "undefined") return variables[statement.variable];
+
+            let { command, args } = statement;
             
             // Find any sub-expressions i.e ${...}
             for (let i = 0; i < args.length; i++) {
@@ -62,11 +59,11 @@ export default class Interpreter {
 
         if (tokens.length === 0) return;
 
-        const cmds = parse(tokens);
+        const statements = parse(tokens);
 
-        for (const cmd of cmds) {
+        for (const statement of statements) {
             try {
-                const output = await run(cmd);
+                const output = await run(statement);
                 outputCallback(output);
                 variables[0] = output;
             } catch (e) {
@@ -111,7 +108,7 @@ function tokenise (text) {
         },
         {
             name: "punctuation",
-            regex: /^(;|\${|})/,
+            regex: /^(;|\${|}|\|)/,
         },
         {
             name: "name",
@@ -157,33 +154,74 @@ function tokenise (text) {
  * @param {string[]} tokens 
  */
 function parse (tokens) {
-    const commands = [];
-    let command = [];
+    const statements = splitTokens(tokens, ";").map(parseStatement);
 
-    const parseCommand = list => { const [ command, ...args ] = list; return { command, args } };
+    return statements;
+}
 
+function parseStatement (tokens) {
+    const pipes = [];
+
+    let items = [];
+
+    const makeNode = items => {
+        if (typeof items[0] === "number") return items[0];
+
+        if (typeof items[0].variable !== "undefined") return items[0];
+
+        const [ command, ...args ] = items;
+        return { command, args };
+    };
+    
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
-        if (t === ";") {
-            commands.push(parseCommand(command));
-            command = [];
+        if (t === "|") {
+            pipes.push(makeNode(items));
+            items = [];
         }
         else if (t === "${") {
             const tail = tokens.slice(i+1);
             const end = tail.indexOf("}");
-            command.push(parse(tail.slice(0, end))[0]);
+            if (end === -1) throw Error("Unterminated sub-expression");
+            items.push(parseStatement(tail.slice(0, end)));
             i += end + 1;
         } 
         else if (typeof t === "number") {
-            command.push(t);
+            items.push(t);
         }
         else if (typeof t === "string" && t.startsWith("$")) {
-            command.push({ variable: t.substr(1) });
+            items.push({ variable: t.substr(1) });
         }
-        else command.push(t);
+        else items.push(t);
     }
 
-    if (command.length) commands.push(parseCommand(command));
+    if (items.length === 0) throw Error("Empty pipe segment");
 
-    return commands;
+    pipes.push(makeNode(items));
+    
+    return pipes.reduce((prev, curr) => {
+        if (prev === null) return curr;
+
+        curr.args.unshift(prev);
+
+        return curr;
+    }, null);
+}
+
+/**
+ * @param {string[]} tokens
+ * @param {string} separator
+ * @returns {string[][]}
+ */
+function splitTokens (tokens, separator) {
+    const out = [];
+    let current = [];
+    for (let i = 0; i < tokens.length; i++) {
+        if (tokens[i] === separator && current.length) {
+            out.push(current);
+            current = [];
+        } else current.push(tokens[i]);
+    }
+    if (current.length) out.push(current);
+    return out;
 }
