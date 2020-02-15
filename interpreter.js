@@ -17,61 +17,71 @@ export default class Interpreter {
      * 
      * @param {string} input 
      */
-    async execute (input, outputCallback) {
-        const { executables = {}, variables = {} } = this.context;
+    async execute (input, output, error) {
+        if (typeof this.context.variables === "undefined") {
+            this.context.variables = {};
+        }
 
-        const run = async (statement) => {
-            if (typeof statement === "number") return statement;
+        const { variables } = this.context;
 
-            if (typeof statement.variable !== "undefined") return variables[statement.variable];
+        try {
+            const tokens = tokenise(input);
 
-            let { command, args } = statement;
-            
-            // Find any sub-expressions i.e ${...}
-            for (let i = 0; i < args.length; i++) {
-                const arg = args[i];
-                if (typeof arg === "object") {
-                    let val;
+            if (tokens.length === 0) return;
 
-                    if (arg.command)
-                        val = await run(arg);
-                    else if (arg.variable)
-                        val = variables[arg.variable];
-                    else
-                        throw Error("Unkown input");
+            const statements = parse(tokens);
 
-                    args[i] = val;
+            for (const statement of statements) {
+                try {
+                    const result = await run.call(this, statement);
+                    output(result);
+                    variables[0] = result;
+                } catch (e) {
+                    error(e.message);
                 }
             }
-
-            if (command in BUILTINS) {
-                return BUILTINS[command](...args);
-            }
-
-            if (command in executables) {
-                return executables[command](...args);
-            }
-
-            throw Error(`Command '${command}' not found`);
-        };
-
-        const tokens = tokenise(input);
-
-        if (tokens.length === 0) return;
-
-        const statements = parse(tokens);
-
-        for (const statement of statements) {
-            try {
-                const output = await run(statement);
-                outputCallback(output);
-                variables[0] = output;
-            } catch (e) {
-                outputCallback(null, e.message);
-            }
+        } catch (e) {
+            error("Error parsing: " + e.message);
         }
     }
 }
+
+async function run (statement) {
+    const { executables = {}, variables = {} } = this.context;
+
+    if (typeof statement === "number") return statement;
+
+    if (typeof statement.variable !== "undefined") return variables[statement.variable];
+
+    let { command, args } = statement;
+    
+    // Find any sub-expressions i.e ${...}
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (typeof arg === "object") {
+            let val;
+
+            if (arg.command)
+                val = await run.call(this, arg);
+            else if (arg.variable)
+                val = variables[arg.variable];
+            else
+                throw Error("Unkown input");
+
+            args[i] = val;
+        }
+    }
+
+    if (command in BUILTINS) {
+        return BUILTINS[command](...args);
+    }
+
+    if (command in executables) {
+        return executables[command](...args);
+    }
+
+    throw Error(`Command '${command}' not found`);
+};
 
 /**
  * 

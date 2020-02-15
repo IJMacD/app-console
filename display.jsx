@@ -16,16 +16,16 @@ export default function ConsoleDisplay ({ interpreter }) {
         setScrollback(0);
         setHist(hist => [ ...hist, { value: input, type: "input" } ]);
         setExecuting(true);
-        // try {
-        //     const output = await interpreter.execute(input);
-        //     setHist(hist => [ ...hist, { value: output, type: "output" } ]);
-        // } catch (e) {
-        //     setHist(hist => [ ...hist, { value: e.message, type: "error" } ]);
-        // }
-        await interpreter.execute(input, (output, error) => {
-            if (output) setHist(hist => [ ...hist, { value: output, type: "output" } ]);
-            if (error) setHist(hist => [ ...hist, { value: error, type: "error" } ]);
-        });
+        
+        await interpreter.execute(
+            input, 
+            output => {
+                setHist(hist => [ ...hist, { value: output, type: "output" } ]);
+            }, 
+            error => {
+                setHist(hist => [ ...hist, { value: error, type: "error" } ]);
+            }
+        );
 
         setExecuting(false);
         inputRef.current.focus();
