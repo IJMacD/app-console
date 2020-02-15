@@ -8,6 +8,7 @@ export default function ConsoleDisplay ({ interpreter }) {
     const [ scrollback, setScrollback ] = React.useState(0);
     const [ executing, setExecuting ] = React.useState(false);
     const inputRef = React.useRef();
+    const [ isFocused, setFocused ] = React.useState(false);
 
     async function handleSubmit (e) {
         e.preventDefault();
@@ -61,18 +62,57 @@ export default function ConsoleDisplay ({ interpreter }) {
         <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()}>
             <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
-                { !executing && '> '}
-                <input 
-                    value={input} 
-                    ref={inputRef}
-                    disabled={executing}
-                    onChange={e => setInput(e.target.value)} 
-                    onKeyUp={handleKeyUp} 
-                    // prevent cursor from jumping to beginning of line
-                    onKeyDown={e => e.key === "ArrowUp" && e.preventDefault()}
-                    autoFocus
-                />
+                <label style={{display: "flex",alignItems:"center",whiteSpace:"pre"}}>
+                    { !executing && '> '}
+                    <Highlight text={input} />
+                    { !executing && <Cursor visible={isFocused} /> }
+                    <input 
+                        value={input} 
+                        ref={inputRef}
+                        disabled={executing}
+                        onChange={e => setInput(e.target.value)} 
+                        onKeyUp={handleKeyUp} 
+                        // prevent cursor from jumping to beginning of line
+                        onKeyDown={e => e.key === "ArrowUp" && e.preventDefault()}
+                        autoFocus
+                        style={{width: 0}}
+                        onFocus={() => setFocused(true)}
+                        onBlur={() => setFocused(false)}
+                    />
+                </label>
             </form>
         </div>
     );
+}
+
+function Highlight ({ text }) {
+    if (!text) return null;
+    const [ command, ...args ] = text.split(" ");
+    if (command.startsWith("${")) return <span style={{color:"red"}}>{text}</span>;
+    const highlightedCommand = highlightToken(command);
+    
+    return (
+        <>
+            {typeof highlightedCommand === "string" ? <span style={{color:"yellow"}}>{command}</span>:highlightedCommand}
+            { args.map(highlightToken).map(v => <>{" "}{v}</>) }
+        </>
+    );
+}
+
+function highlightToken (token) {
+    if (token[0] === "$") return <span style={{color:"green"}}>{token}</span>;
+    if (token[0] === "\"") return <span style={{color:"orange"}}>{token}</span>;
+    if (!isNaN(+token)) return <span style={{color:"blue"}}>{token}</span>;
+    return token;
+}
+
+function Cursor ({ visible=true }) {
+    const [ state, setState ] = React.useState(true);
+
+    React.useEffect(() => {
+        const interval = setInterval(() => setState(!state), 1000);
+        return () => clearInterval(interval);
+    });
+
+    return <div style={{display:"inline-block",marginLeft:1,width:1,height:"1em",backgroundColor:(visible&&state)?"#fff":"#000"}} />;
 }
