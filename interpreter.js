@@ -1,11 +1,11 @@
 const BUILTINS = {
     ver: () => "1.0.0",
-    help: () => `Command Interpreter ver ${BUILTINS.ver()}\n© Iain MacDonald\n\nBuiltin commands:\n${Object.keys(BUILTINS).sort().join("\n")}`,
-    date: () => (new Date()).toISOString(),
-    type: v => typeof v,
+    help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${Object.keys(BUILTINS).sort().join("\n")}`,
+    date: () => new Date(),
+    type: v => v instanceof Date ? "date" : typeof v,
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
-    echo: (...a) => a.join(" "),
-    alert: (...a) => alert(a.join(" ")),
+    echo: (...a) => a.map(toString).join(" "),
+    alert: (...a) => alert(BUILTINS['echo'](a)),
 };
 
 export default class Interpreter {
@@ -34,7 +34,7 @@ export default class Interpreter {
             for (const statement of statements) {
                 try {
                     const result = await run.call(this, statement);
-                    output(result);
+                    output(toString(result));
                     variables[0] = result;
                 } catch (e) {
                     error(e.message);
@@ -44,6 +44,11 @@ export default class Interpreter {
             error("Error parsing: " + e.message);
         }
     }
+}
+
+function toString (value) {
+    if (value instanceof Date) return value.toISOString();
+    return value;
 }
 
 async function run (statement) {
