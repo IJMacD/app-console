@@ -5,7 +5,8 @@ const BUILTINS = {
     type: v => v instanceof Date ? "date" : typeof v,
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
     echo: (...a) => a.map(toString).join(" "),
-    alert: (...a) => alert(BUILTINS['echo'](a)),
+    alert: (...a) => alert(BUILTINS['echo'](...a)),
+    cast: (v,t) => t === "number" ? +v : (t === "string" ? toString(v) : v),
 };
 
 export default class Interpreter {
@@ -47,8 +48,9 @@ export default class Interpreter {
 }
 
 function toString (value) {
+    if (typeof value === "undefined" || value === null) return "";
     if (value instanceof Date) return value.toISOString();
-    return value;
+    return String(value);
 }
 
 async function run (statement) {
