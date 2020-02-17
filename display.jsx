@@ -61,7 +61,7 @@ export default function ConsoleDisplay ({ interpreter }) {
         <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()}>
             <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
-                { !executing && '> '}
+                { !executing && '> ' }
                 <input 
                     value={input} 
                     ref={inputRef}

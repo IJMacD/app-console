@@ -1,0 +1,8 @@
+{
+  "name": "app-console",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "http://github.com/ijmacd/app-console.git",
+  "author": "Iain MacDonald <IJMacD@gmail.com>",
+  "license": "MIT"
+}

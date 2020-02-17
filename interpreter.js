@@ -1,12 +1,13 @@
 const BUILTINS = {
-    ver: () => "1.0.0",
+    ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
     help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${Object.keys(BUILTINS).sort().join("\n")}`,
     date: () => new Date(),
-    type: v => v instanceof Date ? "date" : typeof v,
+    type: v => v instanceof Date ? "date" : (Array.isArray(v) ? "list" : typeof v),
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
     echo: (...a) => a.map(toString).join(" "),
     alert: (...a) => alert(BUILTINS['echo'](...a)),
     cast: (v,t) => t === "number" ? +v : (t === "string" ? toString(v) : v),
+    length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
 };
 
 export default class Interpreter {
@@ -47,9 +48,15 @@ export default class Interpreter {
     }
 }
 
+/**
+ * 
+ * @param {any} value 
+ * @returns {string}
+ */
 function toString (value) {
     if (typeof value === "undefined" || value === null) return "";
     if (value instanceof Date) return value.toISOString();
+    if (Array.isArray(value)) return value.map(toString).join("\n");
     return String(value);
 }
 
@@ -108,6 +115,7 @@ function tokenise (text) {
         {
             name: "string",
             regex: /^"([^"]*)"/,
+            value: v => v.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
         },
         {
             name: "num",
