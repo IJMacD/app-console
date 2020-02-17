@@ -65,7 +65,13 @@ async function run (statement) {
 
     if (typeof statement === "number") return statement;
 
+    if (typeof statement === "string") return statement;
+
     if (typeof statement.variable !== "undefined") return getVariable.call(this, statement.variable);
+
+    if (statement.type === "assignment") {
+        return setVariable.call(this, statement.name, await run.call(this, statement.value));
+    }
 
     let { command, args } = statement;
     
@@ -128,7 +134,7 @@ async function setVariable (name, value) {
         } catch (e) {}
     }
 
-    if (name in variables) variables[name] = value;
+    variables[name] = value;
 }
 
 /**
@@ -167,7 +173,7 @@ function tokenise (text) {
         },
         {
             name: "punctuation",
-            regex: /^(;|\${|}|\|)/,
+            regex: /^(;|\${|}|\||=)/,
         },
         {
             name: "name",
@@ -227,6 +233,14 @@ function parseStatement (tokens) {
         if (typeof items[0] === "number") return items[0];
 
         if (typeof items[0].variable !== "undefined") return items[0];
+
+        if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
+            return {
+                type: "assignment",
+                name: items[0],
+                value: items[2],
+            };
+        }
 
         const [ command, ...args ] = items;
         return { command, args };
