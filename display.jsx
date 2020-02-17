@@ -1,33 +1,48 @@
 import React from 'react';
+import { Interpreter } from '.';
 
 import './display.css';
 
-export default function ConsoleDisplay ({ interpreter }) {
+export default function ConsoleDisplay ({ interpreter, context = {} }) {
     const [ hist, setHist ] = React.useState([]);
     const [ input, setInput ] = React.useState("");
     const [ scrollback, setScrollback ] = React.useState(0);
     const [ executing, setExecuting ] = React.useState(false);
     const inputRef = React.useRef();
+    const interpreterRef = React.useRef(interpreter);
+
+    if (!interpreterRef.current) {
+        interpreterRef.current = new Interpreter(context);
+    }
+
+    function pushHist (newItem) {
+        setHist(hist => [ ...hist, newItem ]);
+    }
 
     async function handleSubmit (e) {
         e.preventDefault();
 
         setInput("");
         setScrollback(0);
-        setHist(hist => [ ...hist, { value: input, type: "input" } ]);
-        setExecuting(true);
+        pushHist({ value: input, type: "input" });
         
-        await interpreter.execute(
-            input, 
-            output => {
-                setHist(hist => [ ...hist, { value: output, type: "output" } ]);
-            }, 
-            error => {
-                setHist(hist => [ ...hist, { value: error, type: "error" } ]);
-            }
-        );
+        if (interpreterRef.current) {
+            setExecuting(true);
+            
+            await interpreterRef.current.execute(
+                input, 
+                output => {
+                    pushHist({ value: output, type: "output" });
+                }, 
+                error => {
+                    pushHist({ value: error, type: "error" });
+                }
+            );
 
-        setExecuting(false);
+            setExecuting(false);
+        } else {
+            pushHist({ value: "No interpreter specified", type: "error" });
+        }
         inputRef.current.focus();
     }
 
