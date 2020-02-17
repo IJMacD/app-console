@@ -61,11 +61,11 @@ function toString (value) {
 }
 
 async function run (statement) {
-    const { executables = {}, variables = {} } = this.context;
+    const { executables = {} } = this.context;
 
     if (typeof statement === "number") return statement;
 
-    if (typeof statement.variable !== "undefined") return variables[statement.variable];
+    if (typeof statement.variable !== "undefined") return getVariable.call(this, statement.variable);
 
     let { command, args } = statement;
     
@@ -78,12 +78,20 @@ async function run (statement) {
             if (arg.command)
                 val = await run.call(this, arg);
             else if (arg.variable)
-                val = variables[arg.variable];
+                val = await getVariable.call(this, arg.variable);
             else
                 throw Error("Unkown input");
 
             args[i] = val;
         }
+    }
+
+    if (command === "get") {
+        return getVariable.call(this, ...args);
+    }
+
+    if (command === "set") {
+        return setVariable.call(this, ...args);
     }
 
     if (command in BUILTINS) {
@@ -96,6 +104,32 @@ async function run (statement) {
 
     throw Error(`Command '${command}' not found`);
 };
+
+async function getVariable (name) {
+    const { executables = {}, variables = {} } = this.context;
+
+    if ('get' in executables) {
+        try {
+            const result = await executables.get(name);
+            return result;
+        } catch (e) {}
+    }
+
+    if (name in variables) return variables[name];
+}
+
+async function setVariable (name, value) {
+    const { executables = {}, variables = {} } = this.context;
+
+    if ('set' in executables) {
+        try {
+            const result = await executables.set(name, value);
+            return result;
+        } catch (e) {}
+    }
+
+    if (name in variables) variables[name] = value;
+}
 
 /**
  * 
