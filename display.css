@@ -4,7 +4,8 @@
     font-family: 'Courier New', Courier, monospace;
     font-size: 14px;
     overflow-x: hidden;
-    white-space: pre;
+    white-space: pre-line;
+    word-break: break-all;
 }
 
 .ConsoleDisplay ul {
@@ -24,6 +25,7 @@
 .ConsoleDisplay form {
     display: flex;
     align-items: center;
+    white-space: pre;
 }
 
 .ConsoleDisplay input {

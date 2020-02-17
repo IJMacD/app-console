@@ -1,13 +1,23 @@
 const BUILTINS = {
     ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
-    help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${Object.keys(BUILTINS).sort().join("\n")}`,
+    help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${BUILTINS['commands']().join("\n")}`,
+    commands: () => [...Object.keys(BUILTINS),"get","set"].sort(),
+    variables () { return Object.keys(this.context.variables); },
+    get: getVariable,
+    set: setVariable,
     date: () => new Date(),
-    type: v => v instanceof Date ? "date" : (Array.isArray(v) ? "list" : typeof v),
+    type: v => v instanceof Date ? "date" : (Array.isArray(v) ? "list" : (v === null ? "": typeof v)),
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
     echo: (...a) => a.map(toString).join(" "),
     alert: (...a) => alert(BUILTINS['echo'](...a)),
-    cast: (v,t) => t === "number" ? +v : (t === "string" ? toString(v) : v),
+    cast: (v,t) => {
+        if (t === "number") return +v;
+        if (t === "string") return toString(v);
+        if (t === "list" && typeof v === "string") return v.split("\n");
+        return v;
+    },
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
+    json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
 };
 
 export default class Interpreter {
@@ -92,20 +102,12 @@ async function run (statement) {
         }
     }
 
-    if (command === "get") {
-        return getVariable.call(this, ...args);
-    }
-
-    if (command === "set") {
-        return setVariable.call(this, ...args);
-    }
-
     if (command in BUILTINS) {
-        return BUILTINS[command](...args);
+        return BUILTINS[command].call(this,...args);
     }
 
     if (command in executables) {
-        return executables[command](...args);
+        return executables[command].call(this, ...args);
     }
 
     throw Error(`Command '${command}' not found`);
@@ -232,7 +234,10 @@ function parseStatement (tokens) {
     const makeNode = items => {
         if (typeof items[0] === "number") return items[0];
 
-        if (typeof items[0].variable !== "undefined") return items[0];
+        if (typeof items[0].variable !== "undefined") {
+            if (items.length > 1) throw Error("Variable evaluation must be only node in statement");
+            return items[0];
+        }
 
         if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
             return {
