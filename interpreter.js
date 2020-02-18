@@ -22,6 +22,7 @@ const BUILTINS = {
 };
 
 const CONTROL = ["foreach","done"];
+const OPERATORS = ["+","-","*","/"];
 
 export default class Interpreter {
     constructor (context) {
@@ -146,8 +147,21 @@ async function run (statement) {
 
     if (typeof statement.variable === "string") return getVariable.call(this, statement.variable);
 
-    if (statement.operator === "=") {
-        return setVariable.call(this, statement.name, await run.call(this, statement.value));
+    if (typeof statement.operator === "string") {
+        if (statement.operator === "=")
+            return setVariable.call(this, statement.name, await run.call(this, statement.value));
+        
+        const left = await run.call(this, statement.left);
+        const right = await run.call(this, statement.right);
+
+        switch (statement.operator) {
+            case "+": return left + right;
+            case "-": return left - right;
+            case "*": return left * right;
+            case "/": return left / right;
+        }
+
+        throw Error(`Unrecognised operator: ${statement.operator}`);
     }
 
     let { command, args } = statement;
@@ -237,7 +251,7 @@ function tokenise (text) {
         },
         {
             name: "punctuation",
-            regex: /^(;|\${|}|\||=)/,
+            regex: /^(;|\${|}|[|=+*/-])/,
         },
         {
             name: "keyword",
@@ -292,35 +306,45 @@ function parse (tokens) {
     return statements;
 }
 
+function makeNode (items) {
+    if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
+        return {
+            operator: "=",
+            name: items[0],
+            value: items[2],
+        };
+    }
+
+    if (items.length === 3 && OPERATORS.includes(items[1])) {
+        return {
+            operator: items[1],
+            left: items[0],
+            right: items[2],
+        };
+    }
+
+    if (typeof items[0].variable !== "undefined") {
+        if (items.length > 1)
+            throw Error("Variable evaluation must be only node in statement");
+        return items[0];
+    }
+
+    if (typeof items[0] === "number")
+        return items[0];
+
+    if (CONTROL.includes(items[0])) {
+        const [control, ...args] = items;
+        return { control, args };
+    }
+
+    const [command, ...args] = items;
+    return { command, args };
+}
+
 function parseStatement (tokens) {
     const pipes = [];
 
     let items = [];
-
-    const makeNode = items => {
-        if (typeof items[0] === "number") return items[0];
-
-        if (typeof items[0].variable !== "undefined") {
-            if (items.length > 1) throw Error("Variable evaluation must be only node in statement");
-            return items[0];
-        }
-
-        if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
-            return {
-                operator: "=",
-                name: items[0],
-                value: items[2],
-            };
-        }
-
-        if (CONTROL.includes(items[0])) {
-            const [ control, ...args ] = items;
-            return { control, args };
-        }
-
-        const [ command, ...args ] = items;
-        return { command, args };
-    };
     
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
