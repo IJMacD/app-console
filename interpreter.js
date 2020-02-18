@@ -154,6 +154,7 @@ async function run (statement) {
         const left = await run.call(this, statement.left);
         const right = await run.call(this, statement.right);
 
+        // eslint-disable-next-line
         switch (statement.operator) {
             case "+": return left + right;
             case "-": return left - right;
@@ -210,6 +211,7 @@ async function setVariable (name, value) {
 
     try {
         variables[name] = value;
+        return value;
     } catch (e) {
         throw Error(`${name} is readonly`);
     }
@@ -387,8 +389,17 @@ function parseStatement (tokens) {
     return pipes.reduce((prev, curr) => {
         if (prev === null) return curr;
 
+        // replace pipe-into-variable scenario with assignment
+        if (typeof curr.variable !== "undefined") {
+            return {
+                operator: "=",
+                name: curr.variable,
+                value: prev,
+            };
+        }
+
         if (!curr.args) {
-            throw Error(`Unable to pipe to ${typeof curr.variable !== "undefined" ? "variable" : typeof curr}`);
+            throw Error(`Unable to pipe to ${typeof curr}`);
         }
 
         curr.args.unshift(prev);
