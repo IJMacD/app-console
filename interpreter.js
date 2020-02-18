@@ -18,7 +18,10 @@ const BUILTINS = {
     },
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
+    range: n => [...Array(n)].map((n,i) => i),
 };
+
+const CONTROL = ["foreach","done"];
 
 export default class Interpreter {
     constructor (context) {
@@ -34,26 +37,89 @@ export default class Interpreter {
             this.context.variables = {};
         }
 
-        const { variables } = this.context;
-
         try {
             const tokens = tokenise(input);
 
             if (tokens.length === 0) return;
 
             const statements = parse(tokens);
-
-            for (const statement of statements) {
-                try {
-                    const result = await run.call(this, statement);
-                    output(toString(result));
-                    variables[0] = result;
-                } catch (e) {
-                    error(e.message);
-                }
+            
+            try {
+                await this.executeStatements(statements, output, error);
+            } catch (e) {
+                error(e.message);
             }
         } catch (e) {
             error("Error parsing: " + e.message);
+        }
+    }
+
+    /**
+     * 
+     * @param {StatementNode[]} statements 
+     * @param {(output: string) => void} output 
+     * @param {(error: string) => void} error 
+     */
+    async executeStatements(statements, output, error) {
+        const { variables } = this.context;
+
+        for (let i = 0; i < statements.length; i++) {
+
+            const statement = statements[i];
+            if (statement.control === "foreach") {
+                const items = BUILTINS['cast'](await run.call(this, statement.args[0]), "list");
+                this.context.forLoop = {
+                    originalItem: variables.item,
+                    start: i,
+                    items,
+                    iteration: 0,
+                };
+                
+                if (items.length === 0) {
+                    const idx = statements.slice(i + 1).findIndex(s => s.control === "done");
+                    i = (idx === -1) ? statements.length : idx;
+                    continue;
+                }
+
+                variables.item = items[0];
+            }
+            else if (statement.control === "done") {
+                if (this.context.forLoop) {
+                    this.context.forLoop.iteration++;
+                    if (this.context.forLoop.iteration < this.context.forLoop.items.length) {
+                        i = this.context.forLoop.start;
+                        variables.item = this.context.forLoop.items[this.context.forLoop.iteration];
+                    }
+                    else {
+                        if (typeof this.context.forLoop.originalItem === "undefined") {
+                            delete variables.item;
+                        }
+                        else {
+                            variables.item = this.context.forLoop.originalItem;
+                        }
+                        this.context.forLoop = null;
+                    }
+                }
+                else {
+                    throw Error(`Unexpected control word: ${statement.control}`);
+                }
+            }
+            else {
+                await this.executeStatement(statement, output, error);
+            }
+        }
+    }
+
+    async executeStatement(statement, output, error) {
+        const { variables } = this.context;
+
+        try {
+            const result = await run.call(this, statement);
+            output(toString(result));
+            variables[0] = result;
+        }
+        catch (e) {
+            error(e.message);
         }
     }
 }
@@ -73,41 +139,33 @@ function toString (value) {
 async function run (statement) {
     const { executables = {} } = this.context;
 
-    if (typeof statement === "number") return statement;
+    if (typeof statement !== "object") return statement;
 
-    if (typeof statement === "string") return statement;
+    // e.g. $$variable
+    if (typeof statement.variable === "object") return getVariable.call(this, await run.call(this, statement.variable));
 
-    if (typeof statement.variable !== "undefined") return getVariable.call(this, statement.variable);
+    if (typeof statement.variable === "string") return getVariable.call(this, statement.variable);
 
-    if (statement.type === "assignment") {
+    if (statement.operator === "=") {
         return setVariable.call(this, statement.name, await run.call(this, statement.value));
     }
 
     let { command, args } = statement;
-    
-    // Find any sub-expressions i.e ${...}
-    for (let i = 0; i < args.length; i++) {
-        const arg = args[i];
+
+    const evaldArgs = await Promise.all(args.map(arg => {
         if (typeof arg === "object") {
-            let val;
-
-            if (arg.command)
-                val = await run.call(this, arg);
-            else if (arg.variable)
-                val = await getVariable.call(this, arg.variable);
-            else
-                throw Error("Unkown input");
-
-            args[i] = val;
+            return run.call(this, arg);
         }
-    }
+
+        return arg;
+    }));
 
     if (command in BUILTINS) {
-        return BUILTINS[command].call(this,...args);
+        return BUILTINS[command].call(this,...evaldArgs);
     }
 
     if (command in executables) {
-        return executables[command].call(this, ...args);
+        return executables[command].call(this, ...evaldArgs);
     }
 
     throw Error(`Command '${command}' not found`);
@@ -136,7 +194,11 @@ async function setVariable (name, value) {
         } catch (e) {}
     }
 
-    variables[name] = value;
+    try {
+        variables[name] = value;
+    } catch (e) {
+        throw Error(`${name} is readonly`);
+    }
 }
 
 /**
@@ -166,7 +228,7 @@ function tokenise (text) {
         },
         {
             name: "variable",
-            regex: /^\$\w+/,
+            regex: /^\$+\w+/,
         },
         {
             name: "boolean",
@@ -176,6 +238,10 @@ function tokenise (text) {
         {
             name: "punctuation",
             regex: /^(;|\${|}|\||=)/,
+        },
+        {
+            name: "keyword",
+            regex: /^(foreach|done)/,
         },
         {
             name: "name",
@@ -241,10 +307,15 @@ function parseStatement (tokens) {
 
         if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
             return {
-                type: "assignment",
+                operator: "=",
                 name: items[0],
                 value: items[2],
             };
+        }
+
+        if (CONTROL.includes(items[0])) {
+            const [ control, ...args ] = items;
+            return { control, args };
         }
 
         const [ command, ...args ] = items;
@@ -267,8 +338,20 @@ function parseStatement (tokens) {
         else if (typeof t === "number") {
             items.push(t);
         }
-        else if (typeof t === "string" && t.startsWith("$")) {
-            items.push({ variable: t.substr(1) });
+        else if (typeof t === "string" && t[0] === "$") {
+            let name = t.substr(1);
+            let item = { variable: name };
+            
+            // Only two levels deep for $$variables
+            if (name[0] === "$") {
+                item = {
+                    variable: {
+                        variable: name.substr(1),
+                    },
+                };
+            }
+
+            items.push(item);
         }
         else items.push(t);
     }
@@ -279,6 +362,10 @@ function parseStatement (tokens) {
     
     return pipes.reduce((prev, curr) => {
         if (prev === null) return curr;
+
+        if (!curr.args) {
+            throw Error(`Unable to pipe to ${typeof curr.variable !== "undefined" ? "variable" : typeof curr}`);
+        }
 
         curr.args.unshift(prev);
 
