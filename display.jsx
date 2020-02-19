@@ -3,17 +3,38 @@ import { Interpreter } from '.';
 
 import './display.css';
 
-export default function ConsoleDisplay ({ interpreter, context = {}, style={} }) {
+export default function ConsoleDisplay ({ interpreter, context = {}, style={}, onClose=null }) {
     const [ hist, setHist ] = React.useState([]);
     const [ input, setInput ] = React.useState("");
     const [ scrollback, setScrollback ] = React.useState(0);
     const [ executing, setExecuting ] = React.useState(false);
     const inputRef = React.useRef();
     const interpreterRef = React.useRef(interpreter);
+    const [ textColor, setTextColor ] = React.useState(style.color);
+    const [ backgroundColor, setBackgroundColor ] = React.useState(style.backgroundColor);
 
     if (!interpreterRef.current) {
         interpreterRef.current = new Interpreter(context);
     }
+
+    console.log("Render Display");
+
+    React.useEffect(() => {
+        context.parent = {
+            variables: {
+                textColor, 
+                backgroundColor
+            },
+            executables: {
+                set (name, value) {
+                    if (name === "textColor") return setTextColor(value);
+                    if (name === "backgroundColor") return setBackgroundColor(value);
+                    throw Error("Unhandled");
+                },
+                exit: onClose || (() => {}),
+            },
+        };
+    }, [ context, textColor, setTextColor, backgroundColor, setBackgroundColor, onClose ]);
 
     function pushHist (newItem) {
         setHist(hist => [ ...hist, newItem ]);
@@ -43,7 +64,8 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={} })
         } else {
             pushHist({ value: "No interpreter specified", type: "error" });
         }
-        inputRef.current.focus();
+
+        inputRef.current && inputRef.current.focus();
     }
 
     /**
@@ -51,7 +73,7 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={} })
      * @param {KeyboardEvent} e 
      */
     function handleKeyUp (e) {
-        const inputHist = hist.filter(h => h.type === "input");
+        const inputHist = hist.filter(h => h.type === "input" && h.value);
         let nextScrollback = NaN;
 
         if (e.key === "ArrowUp") {
@@ -72,8 +94,10 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={} })
         }
     }
 
+    const divStyle = { ...style, color: textColor, backgroundColor };
+
     return (
-        <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={style}>
+        <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
             <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
                 { !executing && '> ' }

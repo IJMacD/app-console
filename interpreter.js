@@ -146,8 +146,6 @@ function toString (value) {
 }
 
 async function run (statement) {
-    const { executables = {} } = this.context;
-
     if (typeof statement !== "object") return statement;
 
     // e.g. $$variable
@@ -184,27 +182,29 @@ async function run (statement) {
     }));
 
     if (command in BUILTINS) {
-        return BUILTINS[command].call(this,...evaldArgs);
+        return BUILTINS[command].call(this, ...evaldArgs);
     }
 
-    if (command in executables) {
-        return executables[command].call(this, ...evaldArgs);
-    }
-
-    throw Error(`Command '${command}' not found`);
+    return executeCommand.call(this, command, evaldArgs);
 };
 
 async function getVariable (name) {
-    const { executables = {}, variables = {} } = this.context;
+    let { context } = this;
 
-    if ('get' in executables) {
-        try {
-            const result = await executables.get(name);
-            return result;
-        } catch (e) {}
+    while (context) {
+        const { executables = {}, variables = {} } = context;
+
+        if ('get' in executables) {
+            try {
+                const result = await executables.get(name);
+                return result;
+            } catch (e) {}
+        }
+
+        if (name in variables) return variables[name];
+
+        context = context.parent;
     }
-
-    if (name in variables) return variables[name];
 
     // special cases
     if (name === "commands") return BUILTINS['commands'].call(this);
@@ -212,21 +212,54 @@ async function getVariable (name) {
 }
 
 async function setVariable (name, value) {
-    const { executables = {}, variables = {} } = this.context;
+    let { context } = this;
 
-    if ('set' in executables) {
-        try {
-            const result = await executables.set(name, value);
-            return result;
-        } catch (e) {}
+    while (context) {
+        const { executables = {}, variables = {} } = context;
+
+        if ('set' in executables) {
+            try {
+                const result = await executables.set(name, value);
+                return result;
+            } catch (e) {}
+        }
+
+        if (name in variables) {
+            try {
+                variables[name] = value;
+                return value;
+            } catch (e) {
+                throw Error(`${name} is readonly`);
+            }
+        }
+
+        context = context.parent;
     }
 
+    // If we're here we got to the deepest context without finding the variable
+    // we're just going to set it on the highest context
     try {
-        variables[name] = value;
+        this.context.variables[name] = value;
         return value;
     } catch (e) {
         throw Error(`${name} is readonly`);
     }
+}
+
+async function executeCommand (command, evaldArgs) {
+    let { context } = this;
+
+    while (context) {
+        const { executables = {} } = context;
+
+        if (command in executables) {
+            return executables[command].call(this, ...evaldArgs);
+        }
+
+        context = context.parent;
+    }
+
+    throw Error(`Command '${command}' not found`);
 }
 
 /**
