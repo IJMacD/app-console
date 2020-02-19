@@ -1,8 +1,8 @@
 const BUILTINS = {
     ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
     help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${BUILTINS['commands']().join("\n")}`,
-    commands: () => [...Object.keys(BUILTINS),"get","set"].sort(),
-    variables () { return Object.keys(this.context.variables); },
+    commands: () => Object.keys(BUILTINS).sort(),
+    variables () { return [...Object.keys(this.context.variables), "commands", "variables"]; }, // Not fat arrow, so `this` can be used
     get: getVariable,
     set: setVariable,
     date: () => new Date(),
@@ -19,6 +19,7 @@ const BUILTINS = {
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
     range: n => [...Array(n)].map((n,i) => i),
+    grep: (a, r) => a.filter(v => new RegExp(r).test(v)),
 };
 
 const CONTROL = ["foreach","done"];
@@ -45,13 +46,9 @@ export default class Interpreter {
 
             const statements = parse(tokens);
             
-            try {
-                await this.executeStatements(statements, output, error);
-            } catch (e) {
-                error(e.message);
-            }
+            await this.executeStatements(statements, output, error);
         } catch (e) {
-            error("Error parsing: " + e.message);
+            error(e.message);
         }
     }
 
@@ -197,6 +194,10 @@ async function getVariable (name) {
     }
 
     if (name in variables) return variables[name];
+
+    // special cases
+    if (name === "commands") return BUILTINS['commands'].call(this);
+    if (name === "variables") return BUILTINS['variables'].call(this);
 }
 
 async function setVariable (name, value) {
@@ -291,7 +292,7 @@ function tokenise (text) {
         }
 
         if (!done) {
-            throw Error(`Unexpected input at ${i}: ${text.substr(i, 10)}`);
+            throw Error(`  ${Array(i).fill(" ").join("")}^\nUnexpected input at ${i}: ${text.substr(i, 10)}`);
         }
     }
 
