@@ -30,7 +30,7 @@
 
 .ConsoleDisplay input {
     background: transparent;
-    color: white;
+    color: inherit;
     border: 0;
     font-family: 'Courier New', Courier, monospace;
     font-size: 14px;

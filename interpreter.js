@@ -91,7 +91,7 @@ export default class Interpreter {
                 variables[loopVar] = items[0];
             }
             else if (statement.control === "done") {
-                const { forLoop } = this.context;
+                const { forLoop, variables } = this.context;
 
                 if (forLoop) {
                     forLoop.iteration++;

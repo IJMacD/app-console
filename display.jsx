@@ -3,7 +3,7 @@ import { Interpreter } from '.';
 
 import './display.css';
 
-export default function ConsoleDisplay ({ interpreter, context = {} }) {
+export default function ConsoleDisplay ({ interpreter, context = {}, style={} }) {
     const [ hist, setHist ] = React.useState([]);
     const [ input, setInput ] = React.useState("");
     const [ scrollback, setScrollback ] = React.useState(0);
@@ -73,7 +73,7 @@ export default function ConsoleDisplay ({ interpreter, context = {} }) {
     }
 
     return (
-        <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()}>
+        <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={style}>
             <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
                 { !executing && '> ' }
