@@ -20,6 +20,7 @@ const BUILTINS = {
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
     range: n => [...Array(n)].map((n,i) => i),
     grep: (a, r) => a.filter(v => new RegExp(r).test(v)),
+    index: (a, i) => a[i],
 };
 
 const CONTROL = ["foreach","done"];
@@ -66,34 +67,44 @@ export default class Interpreter {
             const statement = statements[i];
             if (statement.control === "foreach") {
                 const items = BUILTINS['cast'](await run.call(this, statement.args[0]), "list");
+                const loopVar = statement.args[1] ? await run.call(this, statement.args[1]) : "item";
                 this.context.forLoop = {
-                    originalItem: variables.item,
+                    originalItem: variables[loopVar],
                     start: i,
                     items,
                     iteration: 0,
+                    loopVar,
                 };
                 
+                // TODO: this doesn't support nested loops
+                const doneIndex = statements.slice(i + 1).findIndex(s => s.control === "done");
+
+                if (doneIndex === -1) {
+                    throw Error("Unterminated foreach loop");
+                }
+
                 if (items.length === 0) {
-                    const idx = statements.slice(i + 1).findIndex(s => s.control === "done");
-                    i = (idx === -1) ? statements.length : idx;
+                    i = doneIndex;
                     continue;
                 }
 
-                variables.item = items[0];
+                variables[loopVar] = items[0];
             }
             else if (statement.control === "done") {
-                if (this.context.forLoop) {
-                    this.context.forLoop.iteration++;
-                    if (this.context.forLoop.iteration < this.context.forLoop.items.length) {
-                        i = this.context.forLoop.start;
-                        variables.item = this.context.forLoop.items[this.context.forLoop.iteration];
+                const { forLoop } = this.context;
+
+                if (forLoop) {
+                    forLoop.iteration++;
+                    if (forLoop.iteration < forLoop.items.length) {
+                        i = forLoop.start;
+                        variables[forLoop.loopVar] = forLoop.items[forLoop.iteration];
                     }
                     else {
-                        if (typeof this.context.forLoop.originalItem === "undefined") {
-                            delete variables.item;
+                        if (typeof forLoop.originalItem === "undefined") {
+                            delete variables[forLoop.loopVar];
                         }
                         else {
-                            variables.item = this.context.forLoop.originalItem;
+                            variables[forLoop.loopVar] = forLoop.originalItem;
                         }
                         this.context.forLoop = null;
                     }
