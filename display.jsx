@@ -17,8 +17,6 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
         interpreterRef.current = new Interpreter(context);
     }
 
-    console.log("Render Display");
-
     React.useEffect(() => {
         context.parent = {
             variables: {
@@ -36,37 +34,41 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
         };
     }, [ context, textColor, setTextColor, backgroundColor, setBackgroundColor, onClose ]);
 
-    function pushHist (newItem) {
-        setHist(hist => [ ...hist, newItem ]);
-    }
-
-    async function handleSubmit (e) {
-        e.preventDefault();
-
-        setInput("");
-        setScrollback(0);
-        pushHist({ value: input, type: "input" });
-        
-        if (interpreterRef.current) {
-            setExecuting(true);
-            
-            await interpreterRef.current.execute(
-                input, 
-                output => {
-                    pushHist({ value: output, type: "output" });
-                }, 
-                error => {
-                    pushHist({ value: error, type: "error" });
-                }
-            );
-
-            setExecuting(false);
-        } else {
-            pushHist({ value: "No interpreter specified", type: "error" });
+    const handleSubmit = React.useCallback(e => {
+        function pushHist (newItem) {
+            setHist(hist => [ ...hist, newItem ]);
         }
 
-        inputRef.current && inputRef.current.focus();
-    }
+        async function handleSubmit (e) {
+            e.preventDefault();
+
+            setInput("");
+            setScrollback(0);
+            pushHist({ value: input, type: "input" });
+            
+            if (interpreterRef.current) {
+                setExecuting(true);
+                
+                await interpreterRef.current.execute(
+                    input, 
+                    output => {
+                        pushHist({ value: output, type: "output" });
+                    }, 
+                    error => {
+                        pushHist({ value: error, type: "error" });
+                    }
+                );
+
+                setExecuting(false);
+            } else {
+                pushHist({ value: "No interpreter specified", type: "error" });
+            }
+
+            inputRef.current && inputRef.current.focus();
+        }
+
+        handleSubmit(e);
+    }, [input, setInput, setScrollback, setHist, setExecuting]);
 
     /**
      * 
@@ -94,7 +96,7 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
         }
     }
 
-    const divStyle = { ...style, color: textColor, backgroundColor };
+    const divStyle = { ...style, color: textColor, background: backgroundColor };
 
     return (
         <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
