@@ -1,8 +1,11 @@
+import { createRequire } from 'module';
+const require = typeof global.require !== "undefined" ? global.require : createRequire(import.meta.url);
+
 const BUILTINS = {
     ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
     help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${BUILTINS['commands']().join("\n")}`,
     commands: () => Object.keys(BUILTINS).sort(),
-    variables () { return [...Object.keys(this.context.variables), "commands", "variables"]; }, // Not fat arrow, so `this` can be used
+    variables () { return this.context.variables }, // Not fat arrow, so `this` can be used
     get: getVariable,
     set: setVariable,
     date: () => new Date(),
@@ -27,7 +30,7 @@ const CONTROL = ["foreach","done"];
 const OPERATORS = ["+","-","*","/"];
 
 export default class Interpreter {
-    constructor (context) {
+    constructor (context = {}) {
         this.context = context;
     }
 
@@ -142,6 +145,7 @@ function toString (value) {
     if (typeof value === "undefined" || value === null) return "";
     if (value instanceof Date) return value.toISOString();
     if (Array.isArray(value)) return value.map(toString).join("\n");
+    if (typeof value === "object") return Object.entries(value).map(([n,v]) => `${n} = ${toString(v)}`).join("\n");
     return String(value);
 }
 
@@ -191,6 +195,8 @@ async function run (statement) {
 async function getVariable (name) {
     let { context } = this;
 
+    // Descend through contexts
+    // deeper and deeper into each parent until we find 
     while (context) {
         const { executables = {}, variables = {} } = context;
 
@@ -208,12 +214,14 @@ async function getVariable (name) {
 
     // special cases
     if (name === "commands") return BUILTINS['commands'].call(this);
-    if (name === "variables") return BUILTINS['variables'].call(this);
+    if (name === "variables") return [...Object.keys(this.context.variables), "commands", "variables"];
 }
 
 async function setVariable (name, value) {
     let { context } = this;
 
+    // Descend through contexts
+    // deeper and deeper into each parent until we find 
     while (context) {
         const { executables = {}, variables = {} } = context;
 

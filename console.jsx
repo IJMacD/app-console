@@ -1,7 +1,7 @@
 import React from 'react';
 import { Interpreter } from '.';
 
-import './display.css';
+import './console.css';
 
 export default function ConsoleDisplay ({ interpreter, context = {}, style={}, onClose=null }) {
     const [ hist, setHist ] = React.useState([]);
