@@ -31,6 +31,19 @@ const BUILTINS = {
         }
     },
     index: (a, i) => a[i],
+    async tee (value, ...options) {
+        const variable = options.find(o => !o.startsWith("-")) || "output";
+        const append = options.some(o => o === "-a");
+        if (append) {
+            const oldVal = await getVariable.call(this, variable) || [];
+            const newVal = Array.isArray(oldVal) ? oldVal : [ oldVal ];
+            newVal.push(value);
+            setVariable.call(this, variable, newVal);
+        } else {
+            setVariable.call(this, variable, value);
+        }
+        return value;
+    }
 };
 
 if (typeof alert !== "undefined") {
@@ -361,7 +374,7 @@ function tokenise (text) {
         },
         {
             name: "punctuation",
-            regex: /^(;|\${|}|&&|[|=+*/&-])/,
+            regex: /^(;|\${|}|&&|[|=+*/&])/,
         },
         {
             name: "keyword",
@@ -369,7 +382,7 @@ function tokenise (text) {
         },
         {
             name: "name",
-            regex: /^\w+/,
+            regex: /^[\w-]+/,
         },
     ]
 
