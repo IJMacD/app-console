@@ -1,5 +1,6 @@
-import { createRequire } from 'module';
-const require = typeof global.require !== "undefined" ? global.require : createRequire(import.meta.url);
+// import { createRequire } from 'module';
+// const url = typeof import.meta !== "undefined" ? import.meta.url : "/";
+// const req = typeof require !== "undefined" ? require : createRequire("/");
 
 const BUILTINS = {
     ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
@@ -127,8 +128,35 @@ export default class Interpreter {
                 }
             }
             else {
-                await this.executeStatement(statement, output, error);
+                await this.executeStatementOperator(statement, output, error);
             }
+        }
+    }
+
+    async executeStatementOperator (statement, output, error) {
+        let promise;
+        const self = this;
+        const originalContext = this.context;
+        // capture context
+        // bug fix from foreach loop e.g.
+        //      range 10 | foreach; sleep $item && echo $item &; done
+        const context = { ...originalContext, variables: { ...originalContext.variables } };
+
+        if (statement.operator === "&&") {
+            promise = this.executeStatementOperator(statement.left, output, error).then(() => {
+                self.context = context;
+                return self.executeStatementOperator(statement.right, output, error).then(() => {
+                    self.context = originalContext;
+                });
+            });
+        } else {
+            promise = this.executeStatement(statement, output, error);
+        }
+
+        if (statement.background) {
+            promise.catch(e => { throw e; });
+        } else {
+            await promise;
         }
     }
 
@@ -333,7 +361,7 @@ function tokenise (text) {
         },
         {
             name: "punctuation",
-            regex: /^(;|\${|}|[|=+*/-])/,
+            regex: /^(;|\${|}|&&|[|=+*/&-])/,
         },
         {
             name: "keyword",
@@ -380,15 +408,57 @@ function tokenise (text) {
 }
 
 /**
+ * @typedef StatementNode
+ * @prop {string} [control]
+ * @prop {string} [command]
+ * @prop {StatementNode[]} [args]
+ * @prop {string} [operator]
+ * @prop {string|StatementNode} [name]
+ * @prop {StatementNode} [variable]
+ * @prop {string|StatementNode} [value]
+ * @prop {string|StatementNode} [left]
+ * @prop {string|StatementNode} [right]
+ * @prop {boolean} [background]
+ */
+
+/**
  * 
  * @param {string[]} tokens 
+ * @returns {StatementNode[]}
  */
 function parse (tokens) {
-    const statements = splitTokens(tokens, ";").map(parseStatement);
+    const statements = splitTokens(tokens, ";").map(parseStatementOperators);
 
     return statements;
 }
 
+/**
+ * 
+ * @param {string[]} tokens 
+ * @returns {StatementNode}
+ */
+function parseStatementOperators (tokens) {
+    let background = false;
+
+    if (tokens[tokens.length-1] === "&") {
+        background = true;
+        tokens.length--;
+    }
+
+    const statements = splitTokens(tokens, "&&").map(parseStatement);
+
+    const statement = joinStatementOperators(statements);
+
+    statement.background = background;
+
+    return statement;
+}
+
+/**
+ * 
+ * @param {*} items 
+ * @returns {StatementNode}
+ */
 function makeNode (items) {
     if (items.length === 3 && typeof items[0] === "string" && items[1] === "=") {
         return {
@@ -424,6 +494,11 @@ function makeNode (items) {
     return { command, args };
 }
 
+/**
+ * 
+ * @param {string[]} tokens 
+ * @returns {StatementNode}
+ */
 function parseStatement (tokens) {
     const pipes = [];
 
@@ -466,9 +541,21 @@ function parseStatement (tokens) {
     if (items.length === 0) throw Error("Empty pipe segment");
 
     pipes.push(makeNode(items));
-    
+
+    const statement = joinPipes(pipes);
+
+    return statement;
+}
+
+/**
+ * 
+ * @param {StatementNode[]} pipes 
+ * @returns {StatementNode}
+ */
+function joinPipes(pipes) {
     return pipes.reduce((prev, curr) => {
-        if (prev === null) return curr;
+        if (prev === null)
+            return curr;
 
         // replace pipe-into-variable scenario with assignment
         if (typeof curr.variable !== "undefined") {
@@ -486,6 +573,24 @@ function parseStatement (tokens) {
         curr.args.unshift(prev);
 
         return curr;
+    }, null);
+}
+
+/**
+ * 
+ * @param {StatementNode[]} statements 
+ * @returns {StatementNode}
+ */
+function joinStatementOperators(statements) {
+    return statements.reduce((prev, curr) => {
+        if (prev === null)
+            return curr;
+
+        return {
+            operator: "&&",
+            left: prev,
+            right: curr,
+        };
     }, null);
 }
 
