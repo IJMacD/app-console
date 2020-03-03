@@ -8,8 +8,11 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
     const [ input, setInput ] = React.useState("");
     const [ scrollback, setScrollback ] = React.useState(0);
     const [ executing, setExecuting ] = React.useState(false);
+    /** @type {React.MutableRefObject<HTMLInputElement>} */
     const inputRef = React.useRef();
     const interpreterRef = React.useRef(interpreter);
+    /** @type {React.MutableRefObject<HTMLDivElement>} */
+    const outerRef = React.useRef();
     const [ textColor, setTextColor ] = React.useState(style.color);
     const [ backgroundColor, setBackgroundColor ] = React.useState(style.backgroundColor);
 
@@ -30,9 +33,15 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
                     throw Error("Unhandled");
                 },
                 exit: onClose || (() => {}),
+                clear: () => setHist([]),
             },
         };
-    }, [ context, textColor, setTextColor, backgroundColor, setBackgroundColor, onClose ]);
+    }, [ context, textColor, setTextColor, backgroundColor, setBackgroundColor, onClose, setHist ]);
+
+    React.useEffect(() => {
+        inputRef.current && inputRef.current.focus();
+        outerRef.current && (outerRef.current.scrollTop = outerRef.current.scrollHeight);
+    }, [hist,executing]);
 
     const handleSubmit = React.useCallback(e => {
         function pushHist (newItem) {
@@ -63,8 +72,6 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
             } else {
                 pushHist({ value: "No interpreter specified", type: "error" });
             }
-
-            inputRef.current && inputRef.current.focus();
         }
 
         handleSubmit(e);
@@ -72,7 +79,7 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
 
     /**
      * 
-     * @param {KeyboardEvent} e 
+     * @param {React.KeyboardEvent<HTMLInputElement>} e 
      */
     function handleKeyUp (e) {
         const inputHist = hist.filter(h => h.type === "input" && h.value);
@@ -99,7 +106,7 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
     const divStyle = { ...style, color: textColor, background: backgroundColor };
 
     return (
-        <div className="ConsoleDisplay" onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
+        <div className="ConsoleDisplay" ref={outerRef} onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
             <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
                 { !executing && '> ' }

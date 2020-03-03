@@ -4,15 +4,14 @@ const require = typeof global.require !== "undefined" ? global.require : createR
 const BUILTINS = {
     ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
     help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${BUILTINS['commands']().join("\n")}`,
-    commands: () => Object.keys(BUILTINS).sort(),
+    commands: getCommands,
     variables () { return this.context.variables }, // Not fat arrow, so `this` can be used
     get: getVariable,
     set: setVariable,
     date: () => new Date(),
     type: v => v instanceof Date ? "date" : (Array.isArray(v) ? "list" : (v === null ? "": typeof v)),
     sleep: n => new Promise(r => setTimeout(r, n * 1000)),
-    echo: (...a) => a.map(toString).join(" "),
-    alert: (...a) => alert(BUILTINS['echo'](...a)),
+    echo: (...a) => a.flat().filter(isNotNull).map(toString).join(" "),
     cast: (v,t) => {
         if (t === "number") return +v;
         if (t === "string") return toString(v);
@@ -22,9 +21,20 @@ const BUILTINS = {
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
     range: n => [...Array(n)].map((n,i) => i),
-    grep: (a, r) => a.filter(v => new RegExp(r).test(v)),
+    grep: (a, r) => {
+        try{
+            const re = new RegExp(r);
+            return a.filter(v => re.test(v));
+        } catch (e) {
+            return a.filter(v => v.includes(r));
+        }
+    },
     index: (a, i) => a[i],
 };
+
+if (typeof alert !== "undefined") {
+    BUILTINS['alert'] = (...a) => alert(BUILTINS['echo'](...a));
+}
 
 const CONTROL = ["foreach","done"];
 const OPERATORS = ["+","-","*","/"];
@@ -196,7 +206,7 @@ async function getVariable (name) {
     let { context } = this;
 
     // Descend through contexts
-    // deeper and deeper into each parent until we find 
+    // deeper and deeper into each parent until we find variable
     while (context) {
         const { executables = {}, variables = {} } = context;
 
@@ -221,7 +231,7 @@ async function setVariable (name, value) {
     let { context } = this;
 
     // Descend through contexts
-    // deeper and deeper into each parent until we find 
+    // deeper and deeper into each parent until we find variable
     while (context) {
         const { executables = {}, variables = {} } = context;
 
@@ -268,6 +278,23 @@ async function executeCommand (command, evaldArgs) {
     }
 
     throw Error(`Command '${command}' not found`);
+}
+
+function getCommands () {
+    const cmds = new Set(Object.keys(BUILTINS));
+
+    let { context } = this;
+
+    // Descend through contexts
+    while (context) {
+        const { executables = {} } = context;
+
+        Object.keys(executables).forEach(cmds.add.bind(cmds));
+
+        context = context.parent;
+    }
+
+    return [ ...cmds ].sort();
 }
 
 /**
@@ -344,7 +371,8 @@ function tokenise (text) {
         }
 
         if (!done) {
-            throw Error(`  ${Array(i).fill(" ").join("")}^\nUnexpected input at ${i}: ${text.substr(i, 10)}`);
+            // Prompt   '> '
+            throw Error(`  ${" ".repeat(i)}^\nUnexpected input at ${i}: ${text.substr(i, 10)}`);
         }
     }
 
@@ -477,4 +505,13 @@ function splitTokens (tokens, separator) {
     }
     if (current.length) out.push(current);
     return out;
+}
+
+
+function isNull (v) {
+    return typeof v === "undefined" || v === null || v === "";
+}
+
+function isNotNull (v) {
+    return !isNull(v);
 }
