@@ -5,7 +5,7 @@ Add a custom console to add text interactivity to your app.
 Getting Started
 ---------------
 
-Install package
+Install package:
 ```
 yarn add https://github.com/IJMacD/app-console
 ```
@@ -20,7 +20,10 @@ import { Console } from 'app-console';
 import "app-console/dist/index.css";
 
 function App() {
-  const context = { myVar: 42, executables: { hello: () => "hey you!" } };
+  const context = {
+    variables: { myVar: 42 },
+    executables: { hello: () => "hey you!" }
+  };
 
   return (
     <div className="App">

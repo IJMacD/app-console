@@ -106,7 +106,7 @@ export default function ConsoleDisplay ({ shell = null, context = {}, style = {}
         }
     }
 
-    const divStyle = { height: "100%", ...style, color: textColor, background: backgroundColor };
+    const divStyle = {...style, color: textColor, background: backgroundColor };
 
     return (
         <div className={classes.ConsoleDisplay} ref={outerRef} onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
