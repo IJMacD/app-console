@@ -1,29 +1,32 @@
 import React from 'react';
-import { Interpreter } from '.';
+import Shell from './shell';
 
-import './console.css';
+import classes from './console.css';
 
-export default function ConsoleDisplay ({ interpreter, context = {}, style={}, onClose=null }) {
+/**
+ * @param {object} props
+ * @param {Shell} [props.shell]
+ * @param {object} [props.context]
+ * @param {React.CSSProperties} [props.style]
+ * @param {() => void} [props.onClose]
+ */
+export default function ConsoleDisplay ({ shell = null, context = {}, style = {}, onClose = null }) {
     const [ hist, setHist ] = React.useState([]);
     const [ input, setInput ] = React.useState("");
     const [ scrollback, setScrollback ] = React.useState(0);
     const [ executing, setExecuting ] = React.useState(false);
     /** @type {React.MutableRefObject<HTMLInputElement>} */
     const inputRef = React.useRef();
-    const interpreterRef = React.useRef(interpreter);
+    const shellRef = React.useRef(shell || new Shell(context));
     /** @type {React.MutableRefObject<HTMLDivElement>} */
     const outerRef = React.useRef();
     const [ textColor, setTextColor ] = React.useState(style.color);
     const [ backgroundColor, setBackgroundColor ] = React.useState(style.backgroundColor);
 
-    if (!interpreterRef.current) {
-        interpreterRef.current = new Interpreter(context);
-    }
-
     React.useEffect(() => {
         context.parent = {
             variables: {
-                textColor, 
+                textColor,
                 backgroundColor
             },
             executables: {
@@ -54,15 +57,15 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
             setInput("");
             setScrollback(0);
             pushHist({ value: input, type: "input" });
-            
-            if (interpreterRef.current) {
+
+            if (shellRef.current) {
                 setExecuting(true);
-                
-                await interpreterRef.current.execute(
-                    input, 
+
+                await shellRef.current.execute(
+                    input,
                     output => {
                         pushHist({ value: output, type: "output" });
-                    }, 
+                    },
                     error => {
                         pushHist({ value: error, type: "error" });
                     }
@@ -78,8 +81,8 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
     }, [input, setInput, setScrollback, setHist, setExecuting]);
 
     /**
-     * 
-     * @param {React.KeyboardEvent<HTMLInputElement>} e 
+     *
+     * @param {React.KeyboardEvent<HTMLInputElement>} e
      */
     function handleKeyUp (e) {
         const inputHist = hist.filter(h => h.type === "input" && h.value);
@@ -103,19 +106,19 @@ export default function ConsoleDisplay ({ interpreter, context = {}, style={}, o
         }
     }
 
-    const divStyle = { ...style, color: textColor, background: backgroundColor };
+    const divStyle = { height: "100%", ...style, color: textColor, background: backgroundColor };
 
     return (
-        <div className="ConsoleDisplay" ref={outerRef} onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
-            <ul>{ hist.map((l,i) => <li key={i} className={`ConsoleDisplay-hist-${l.type}`}>{l.value}</li>) }</ul>
+        <div className={classes.ConsoleDisplay} ref={outerRef} onClick={() => getSelection().type !== "Range" && inputRef.current.focus()} style={divStyle}>
+            <ul>{ hist.map((l,i) => <li key={i} className={classes[`ConsoleDisplay-hist-${l.type}`]}>{l.value}</li>) }</ul>
             <form onSubmit={handleSubmit}>
                 { !executing && '> ' }
-                <input 
-                    value={input} 
+                <input
+                    value={input}
                     ref={inputRef}
                     disabled={executing}
-                    onChange={e => setInput(e.target.value)} 
-                    onKeyUp={handleKeyUp} 
+                    onChange={e => setInput(e.target.value)}
+                    onKeyUp={handleKeyUp}
                     // prevent cursor from jumping to beginning of line
                     onKeyDown={e => e.key === "ArrowUp" && e.preventDefault()}
                     autoFocus

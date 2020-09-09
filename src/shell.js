@@ -1,9 +1,5 @@
-// import { createRequire } from 'module';
-// const url = typeof import.meta !== "undefined" ? import.meta.url : "/";
-// const req = typeof require !== "undefined" ? require : createRequire("/");
-
 const BUILTINS = {
-    ver: () => process.env.REACT_APP_COMMIT_HASH || require('./package.json').version,
+    ver: () => process.env.REACT_APP_COMMIT_HASH || require('../package.json').version,
     help: () => `Command Interpreter version ${BUILTINS['ver']()}\n© Iain MacDonald\n\nBuiltin commands:\n${BUILTINS['commands']().join("\n")}`,
     commands: getCommands,
     variables () { return this.context.variables }, // Not fat arrow, so `this` can be used
@@ -21,7 +17,7 @@ const BUILTINS = {
     },
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
-    range: n => [...Array(n)].map((n,i) => i),
+    range: n => Array(n).fill(0).map((n,i) => i),
     grep: (a, r) => {
         try{
             const re = new RegExp(r);
@@ -43,6 +39,12 @@ const BUILTINS = {
             setVariable.call(this, variable, value);
         }
         return value;
+    },
+    eval (...input) {
+        const tokens = tokenise(input.join(" "));
+        if (tokens.length === 0) return;
+        const statements = parse(tokens);
+        return run.call(this, statements[0]);
     }
 };
 
@@ -53,19 +55,22 @@ if (typeof alert !== "undefined") {
 const CONTROL = ["foreach","done"];
 const OPERATORS = ["+","-","*","/"];
 
-export default class Interpreter {
+export default class Shell {
     constructor (context = {}) {
         this.context = context;
     }
 
     /**
-     * 
-     * @param {string} input 
+     *
+     * @param {string} input
      */
-    async execute (input, output, error) {
+    async execute (input, output=this.output, error=this.error) {
         if (typeof this.context.variables === "undefined") {
             this.context.variables = {};
         }
+
+        this.output = output;
+        this.error = error;
 
         try {
             const tokens = tokenise(input);
@@ -73,7 +78,7 @@ export default class Interpreter {
             if (tokens.length === 0) return;
 
             const statements = parse(tokens);
-            
+
             await this.executeStatements(statements, output, error);
         } catch (e) {
             error(e.message);
@@ -81,10 +86,10 @@ export default class Interpreter {
     }
 
     /**
-     * 
-     * @param {StatementNode[]} statements 
-     * @param {(output: string) => void} output 
-     * @param {(error: string) => void} error 
+     *
+     * @param {StatementNode[]} statements
+     * @param {(output: string) => void} output
+     * @param {(error: string) => void} error
      */
     async executeStatements(statements, output, error) {
         const { variables } = this.context;
@@ -102,7 +107,7 @@ export default class Interpreter {
                     iteration: 0,
                     loopVar,
                 };
-                
+
                 // TODO: this doesn't support nested loops
                 const doneIndex = statements.slice(i + 1).findIndex(s => s.control === "done");
 
@@ -188,8 +193,8 @@ export default class Interpreter {
 }
 
 /**
- * 
- * @param {any} value 
+ *
+ * @param {any} value
  * @returns {string}
  */
 function toString (value) {
@@ -211,7 +216,7 @@ async function run (statement) {
     if (typeof statement.operator === "string") {
         if (statement.operator === "=")
             return setVariable.call(this, statement.name, await run.call(this, statement.value));
-        
+
         const left = await run.call(this, statement.left);
         const right = await run.call(this, statement.right);
 
@@ -335,12 +340,12 @@ function getCommands () {
         context = context.parent;
     }
 
-    return [ ...cmds ].sort();
+    return Array.from(cmds).sort();
 }
 
 /**
- * 
- * @param {string} text 
+ *
+ * @param {string} text
  * @returns {string[]}
  */
 function tokenise (text) {
@@ -356,6 +361,11 @@ function tokenise (text) {
         {
             name: "string",
             regex: /^"([^"]*)"/,
+            value: v => v.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
+        },
+        {
+            name: "string_verbatim",
+            regex: /^'[^']*'/,
             value: v => v.replace(/\\n/g, "\n").replace(/\\t/g, "\t"),
         },
         {
@@ -435,8 +445,8 @@ function tokenise (text) {
  */
 
 /**
- * 
- * @param {string[]} tokens 
+ *
+ * @param {string[]} tokens
  * @returns {StatementNode[]}
  */
 function parse (tokens) {
@@ -446,8 +456,8 @@ function parse (tokens) {
 }
 
 /**
- * 
- * @param {string[]} tokens 
+ *
+ * @param {string[]} tokens
  * @returns {StatementNode}
  */
 function parseStatementOperators (tokens) {
@@ -468,8 +478,8 @@ function parseStatementOperators (tokens) {
 }
 
 /**
- * 
- * @param {*} items 
+ *
+ * @param {*} items
  * @returns {StatementNode}
  */
 function makeNode (items) {
@@ -508,15 +518,15 @@ function makeNode (items) {
 }
 
 /**
- * 
- * @param {string[]} tokens 
+ *
+ * @param {string[]} tokens
  * @returns {StatementNode}
  */
 function parseStatement (tokens) {
     const pipes = [];
 
     let items = [];
-    
+
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
         if (t === "|") {
@@ -529,14 +539,15 @@ function parseStatement (tokens) {
             if (end === -1) throw Error("Unterminated sub-expression");
             items.push(parseStatement(tail.slice(0, end)));
             i += end + 1;
-        } 
+        }
         else if (typeof t === "number") {
             items.push(t);
         }
         else if (typeof t === "string" && t[0] === "$") {
             let name = t.substr(1);
+            /** @type {{ variable: string|{ variable: string }}} */
             let item = { variable: name };
-            
+
             // Only two levels deep for $$variables
             if (name[0] === "$") {
                 item = {
@@ -547,6 +558,11 @@ function parseStatement (tokens) {
             }
 
             items.push(item);
+        }
+        else if (typeof t === "string" && t[0] === "'") {
+            const str = t.substr(1, t.length - 2);
+
+            items.push(str);
         }
         else items.push(t);
     }
@@ -561,8 +577,8 @@ function parseStatement (tokens) {
 }
 
 /**
- * 
- * @param {StatementNode[]} pipes 
+ *
+ * @param {StatementNode[]} pipes
  * @returns {StatementNode}
  */
 function joinPipes(pipes) {
@@ -590,8 +606,8 @@ function joinPipes(pipes) {
 }
 
 /**
- * 
- * @param {StatementNode[]} statements 
+ *
+ * @param {StatementNode[]} statements
  * @returns {StatementNode}
  */
 function joinStatementOperators(statements) {
