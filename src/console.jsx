@@ -31,9 +31,9 @@ export default function ConsoleDisplay ({ shell = null, context = {}, style = {}
             },
             executables: {
                 set (name, value) {
-                    if (name === "textColor") return setTextColor(value);
-                    if (name === "backgroundColor") return setBackgroundColor(value);
-                    throw Error("Unhandled");
+                    if (name === "textColor") { setTextColor(value); return true; }
+                    if (name === "backgroundColor") { setBackgroundColor(value); return true; }
+                    return false;
                 },
                 exit: onClose || (() => {}),
                 clear: () => setHist([]),

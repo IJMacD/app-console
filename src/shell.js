@@ -254,18 +254,18 @@ async function getVariable (name) {
     // Descend through contexts
     // deeper and deeper into each parent until we find variable
     while (context) {
-        const { executables = {}, variables = {} } = context;
+        const { executables = {}, variables = {}, parent } = context;
 
         if ('get' in executables) {
             try {
                 const result = await executables.get(name);
-                return result;
+                if (typeof result !== "undefined") return result;
             } catch (e) {}
         }
 
         if (name in variables) return variables[name];
 
-        context = context.parent;
+        context = parent;
     }
 
     // special cases
@@ -279,12 +279,12 @@ async function setVariable (name, value) {
     // Descend through contexts
     // deeper and deeper into each parent until we find variable
     while (context) {
-        const { executables = {}, variables = {} } = context;
+        const { executables = {}, variables = {}, parent } = context;
 
         if ('set' in executables) {
             try {
                 const result = await executables.set(name, value);
-                return result;
+                if (result) return value;
             } catch (e) {}
         }
 
@@ -297,7 +297,7 @@ async function setVariable (name, value) {
             }
         }
 
-        context = context.parent;
+        context = parent;
     }
 
     // If we're here we got to the deepest context without finding the variable
