@@ -17,7 +17,7 @@ const BUILTINS = {
     },
     length: v => (Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n") : [v])).length,
     json: (...a) => a.length === 0 ? null : (a.length === 1 ? JSON.stringify(a[0]) : JSON.stringify(a)),
-    range: n => Array(n).fill(0).map((n,i) => i),
+    range,
     grep: (a, r) => {
         try{
             const re = new RegExp(r);
@@ -183,7 +183,8 @@ export default class Shell {
 
         try {
             const result = await run.call(this, statement);
-            output(toString(result));
+            if (Array.isArray(result)) result.map(toString).map(output);
+            else output(toString(result));
             variables[0] = result;
         }
         catch (e) {
@@ -195,13 +196,14 @@ export default class Shell {
 /**
  *
  * @param {any} value
- * @returns {string}
+ * @returns {string|number}
  */
 function toString (value) {
     if (typeof value === "undefined" || value === null) return "";
     if (value instanceof Date) return value.toISOString();
     if (Array.isArray(value)) return value.map(toString).join("\n");
     if (typeof value === "object") return Object.entries(value).map(([n,v]) => `${n} = ${toString(v)}`).join("\n");
+    if (typeof value === "number") return value;
     return String(value);
 }
 
@@ -648,4 +650,19 @@ function isNull (v) {
 
 function isNotNull (v) {
     return !isNull(v);
+}
+
+function range (start, end=null, step=1) {
+    if (end === null){
+        end = start;
+        start = 0;
+    }
+
+    step = Math.sign(end - start) * Math.abs(step);
+
+    if (step === 0) return [];
+
+    const n = Math.ceil((end - start) / step);
+
+    return Array(n).fill(0).map((_,i) => (i * step) + start);
 }
